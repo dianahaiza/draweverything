@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DrawEverything</title>
+  <!-- Bootstrap CSS -->
+  <link href="/css/main.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom CSS -->
+  <style>
+html, body{
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Navbar */
+
+.navbar{
+  border-bottom: 1px solid #ddd;
+  position: relative;
+  z-index: 2000;
+}
+
+.custom-navbar .menu-left button {
+  margin-right: 8px;
+}
+.custom-navbar .menu-right {
+  margin-left: auto;
+}
+.custom-navbar .menu-right button {
+  margin-left: 8px;
+}
+
+.btn-light:hover {
+  background-color: #9759c1; /* purple on hover */
+  color: #ffffff; /* White text on hover */
+}
+
+/* Main layout */
+.main-layout {
+  height: calc(100vh - 56px); /* subtract navbar height */
+}
+
+/* Sidebar fixed full height */
+.tool-sidebar {
+  position: fixed;
+  top: 54px;          /* height of top navbar - 2px to fill in gap*/
+  bottom: 50px;       /* height of bottom bar */
+  left: 0;
+  width: 125px;     
+  background-color: #F2F2F2;
+  padding: 10px;
+  border-right: 1px solid #CECECE;
+  display: flex;
+  justify-content: center; /* center buttons horizontally */
+  align-items: flex-start; /* keep them aligned to top */
+  z-index: 1000;
+}
+
+/* Grid for tool buttons (10 rows × 2 columns as base) */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  gap: 6px;
+  height: 100%;
+}
+
+.tool-btn {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  color: #333;
+  transition: background 0.2s, color 0.2s;
+}
+
+.tool-btn:hover {
+  background-color: #dad7da;
+  border-radius: 6px;
+  color: #9759c1;
+}
+
+.tool-btn.active {
+  background-color: #9759c1;
+  color: white;
+  border-radius: 6px;
+}
+
+/* Drawing area */
+.drawing-area {
+  margin-left: 125px; /* leave space for sidebar */
+  width: calc(100% - 125px); /* take the rest of the width */
+  height: calc(100vh - 56px - 50px); /* full height minus navbar + bottom bar */
+  background-color: #D9D9D9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible; /* allow canvas to move freely */
+  position: relative; /* added to establish stacking context */
+  z-index: 1; /* lower than navbar and sidebar */
+}
+
+.canvas-container {
+  position: relative;
+  width: 1270px;  /* Fixed width - canvas will not scale */
+  height: 610px; /* Fixed height - canvas will not scale */
+  transform-origin: center center;
+}
+
+#drawCanvas {
+  border: 1px solid #ccc;
+  width: 1270px;  /* Match container */
+  height: 610px; /* Match container */
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#tempCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1270px;  /* Match container */
+  height: 610px; /* Match container */
+  pointer-events: auto;
+}
+
+/* Bottom bar */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: #F2F2F2;
+  border-top: 1px solid #CECECE;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* Color picker square */
+.color-picker {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+}
+
+/* Brush size input */
+.size-input {
+  width: 60px;
+  text-align: center;
+}
+
+/* Zoom slider */
+.zoom-slider {
+  width: 150px;
+}
+
+input[type="range"]{
+  accent-color: #9759c1;
+}
+
+/* For WebKit browsers (Chrome, Safari, Edge) */
+input[type="range"]::-webkit-slider-thumb {
+  background-color: #9759c1; 
+  border: 1px solid #43205a;
+}
+
+/* For Firefox */
+input[type="range"]::-moz-range-thumb {
+  background-color: #9759c1; /* Blue color */
+  border: 1px solid #43205a;
+  /* Add other styling */
+}
+
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-light bg-topmenu px-3 custom-navbar">
+  <div class="container-fluid">
+
+    <!-- Left side buttons -->
+    <div class="menu-left">
+      <button class="btn btn-altlight fw-bold shadow" id="openBtn">Open</button>
+      <button class="btn btn-altlight fw-bold shadow" id="newBtn">New</button>
+      <button class="btn btn-light shadow" id="undoBtn"><i class="bi bi-arrow-counterclockwise"></i></button>
+      <button class="btn btn-light shadow" id="redoBtn"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+
+    <!-- Center brand - hidden on small screens -->
+    <div class="navbar-brand position-absolute start-50 translate-middle-x fw-bold fs-4 d-none d-lg-block text-altmain">
+      DrawEverything
+      <i class="bi bi-brush-fill text-altmain"></i>
+    </div>
+
+    <!-- Right side buttons -->
+    <div class="menu-right">
+      <button class="btn btn-altmain fw-bold shadow"id="saveBtn">Save</button>
+    </div>
+
+  </div>
+</nav>
+
+<input type="file" id="openFileInput" accept="image/*" style="display: none;">
+
+<!-- Layout with sidebar + drawing area -->
+<div class="main-layout">
+  <div class="row">
+    <!-- Left sidebar tools -->
+    <div class="tool-sidebar">
+      <div class="tool-grid">
+        <button class="tool-btn" data-tool="brush" title="Brush"><i class="bi bi-brush"></i></button>
+        <button class="tool-btn" data-tool="eraser" title="Eraser"><i class="bi bi-eraser"></i></button>
+        <button class="tool-btn" data-tool="text" title="Text"><i class="bi bi-type"></i></button>
+        <button class="tool-btn" data-tool="fill" title="Fill"><i class="bi bi-paint-bucket"></i></button>
+        <button class="tool-btn" data-tool="line" title="Line"><i class="bi bi-slash-lg"></i></button>
+        <button class="tool-btn" data-tool="rect" title="Rectangle"><i class="bi bi-square"></i></button>
+        <button class="tool-btn" data-tool="circle" title="Circle"><i class="bi bi-circle"></i></button>
+        <button class="tool-btn" data-tool="triangle" title="Triangle"><i class="bi bi-triangle"></i></button>
+        <button class="tool-btn" data-tool="star" title="Star"><i class="bi bi-star"></i></button>
+        <button class="tool-btn" data-tool="arrow" title="Arrow"><i class="bi bi-arrow-up-right"></i></button>
+        <button class="tool-btn" data-tool="hand" title="Hand"><i class="bi bi-hand-index"></i></button>
+        <button class="tool-btn" data-tool="clear" title="Clear"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>
+
+    <!-- Drawing canvas area -->
+    <div class="drawing-area">
+      <div class="canvas-container" id="canvasContainer">
+        <canvas id="drawCanvas"></canvas>
+        <canvas id="tempCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Bar -->
+<div class="bottom-bar px-3">
+  <div class="container-fluid d-flex align-items-center justify-content-between">
+    
+    <!-- Left side: Color + Brush size controls -->
+    <div class="d-flex align-items-center">
+      <!-- Color Picker -->
+      <input type="color" class="form-control form-control-color color-picker me-2" value="#000000">
+
+      <!-- Brush size input -->
+      <input type="number" class="form-control size-input me-1" value="5" min="1">
+
+      <!-- px label -->
+      <span class="me-2">px</span>
+
+      <!-- Size adjust buttons -->
+      <button class="btn btn-outline-secondary me-1">-</button>
+      <button class="btn btn-outline-secondary">+</button>
+    </div>
+
+    <!-- Right side: Zoom slider -->
+    <div class="d-flex align-items-center">
+      <span class="me-2">Zoom</span>
+      <input type="range" id="zoomRange" class="form-range zoom-slider" min="10" max="200" value="100">
+      <output for="zoomRange" id="output"></output>
+    </div>
+
+  </div>
+</div>
+
+<!-- New Drawing Confirmation Modal -->
+<div class="modal fade" id="newDrawingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Start New Drawing</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="newModalBody">
+        <!-- Filled dynamically depending on save state -->
+      </div>
+      <div class="modal-footer" id="newModalFooter">
+        <!-- Buttons injected dynamically -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const canvas = document.getElementById("drawCanvas");
+const ctx = canvas.getContext("2d");
+const tempCanvas = document.getElementById("tempCanvas");
+const tempCtx = tempCanvas.getContext("2d");
+const container = document.getElementById("canvasContainer");
+
+let undoStack = [];
+let redoStack = [];
+
+// Set fixed canvas resolution (internal drawing size)
+// These values are reasonable for a default canvas that fits most screens
+const CANVAS_WIDTH = 1270;
+const CANVAS_HEIGHT = 610;
+
+canvas.width = CANVAS_WIDTH;
+canvas.height = CANVAS_HEIGHT;
+tempCanvas.width = CANVAS_WIDTH;
+tempCanvas.height = CANVAS_HEIGHT;
+
+// Fill canvas with white background
+ctx.fillStyle = "#ffffff";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Defaults
+let currentTool = "brush";
+let drawing = false;
+let brushColor = "#000000";
+let brushSize = 5;
+
+let startX, startY;
+
+// Text tool variables
+let isTyping = false;
+let textInput = null;
+let textX = 0, textY = 0;
+
+// Panning variables
+let isPanning = false;
+let panX = 0, panY = 0;
+let startPanX = 0, startPanY = 0;
+
+// Zoom - will be calculated to fit canvas in view initially
+let zoomLevel = 1;
+
+// Tool buttons
+const toolButtons = document.querySelectorAll(".tool-btn");
+toolButtons.forEach(button => {
+  button.addEventListener("click", () => {
+    currentTool = button.getAttribute("data-tool");
+    toolButtons.forEach(b => b.classList.remove("active"));
+    button.classList.add("active");
+
+    // Set cursor based on tool
+    if (currentTool === "hand") {
+      tempCanvas.style.cursor = "grab";
+    } else if (currentTool === "text") {
+      tempCanvas.style.cursor = "text";
+    } else if (currentTool === "fill") {
+      tempCanvas.style.cursor = "pointer";
+    } else {
+      tempCanvas.style.cursor = "crosshair";
+    }
+
+    // If Clear clicked, wipe immediately
+    if (currentTool === "clear") {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Refill with white background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+      // Reset to brush and active state
+      currentTool = "brush";
+      button.classList.remove("active");
+      toolButtons.forEach(b => {
+        if (b.getAttribute("data-tool") === "brush") b.classList.add("active");
+      });
+
+      saveState();
+    }
+  });
+});
+
+// ---------- Coordinate Conversion Helper ----------
+function getCanvasCoordinates(e) {
+  const rect = tempCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / zoomLevel;
+  const y = (e.clientY - rect.top) / zoomLevel;
+  return { x, y };
+}
+
+// ---------- Fill Tool (Flood Fill) ----------
+function floodFill(startX, startY, fillColor) {
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+  
+  // Convert fill color from hex to RGB
+  const fillRGB = hexToRgb(fillColor);
+  
+  // Get the color at the starting pixel
+  const startPos = (startY * canvas.width + startX) * 4;
+  const startR = pixels[startPos];
+  const startG = pixels[startPos + 1];
+  const startB = pixels[startPos + 2];
+  const startA = pixels[startPos + 3];
+  
+  // If the target color is the same as fill color AND fully opaque, do nothing
+  if (startR === fillRGB.r && startG === fillRGB.g && startB === fillRGB.b && startA === 255) {
+    return;
+  }
+  
+  // Stack-based flood fill to avoid recursion stack overflow
+  const stack = [[startX, startY]];
+  const visited = new Set();
+  
+  while (stack.length > 0) {
+    const [x, y] = stack.pop();
+    
+    // Check bounds
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) {
+      continue;
+    }
+    
+    // Check if already visited
+    const key = `${x},${y}`;
+    if (visited.has(key)) {
+      continue;
+    }
+    visited.add(key);
+    
+    // Get current pixel color
+    const pos = (y * canvas.width + x) * 4;
+    const r = pixels[pos];
+    const g = pixels[pos + 1];
+    const b = pixels[pos + 2];
+    const a = pixels[pos + 3];
+    
+    // Check if this pixel matches the start color
+    if (r === startR && g === startG && b === startB && a === startA) {
+      // Fill this pixel
+      pixels[pos] = fillRGB.r;
+      pixels[pos + 1] = fillRGB.g;
+      pixels[pos + 2] = fillRGB.b;
+      pixels[pos + 3] = 255;
+      
+      // Add neighbors to stack
+      stack.push([x + 1, y]);
+      stack.push([x - 1, y]);
+      stack.push([x, y + 1]);
+      stack.push([x, y - 1]);
+    }
+  }
+  
+  // Put the modified image data back on canvas
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : { r: 0, g: 0, b: 0 };
+}
+
+// ---------- Mouse Events ----------
+// mousedown
+tempCanvas.addEventListener("mousedown", (e) => {
+  const coords = getCanvasCoordinates(e);
+  startX = coords.x;
+  startY = coords.y;
+
+  // Hand (panning) - return early so we don't set drawing
+  if (currentTool === "hand") {
+    isPanning = true;
+    startPanX = e.clientX - panX;
+    startPanY = e.clientY - panY;
+    tempCanvas.style.cursor = "grabbing";
+    return;
+  }
+
+  // Text tool - create input field
+  if (currentTool === "text") {
+    createTextInput(e.clientX, e.clientY, coords.x, coords.y);
+    return;
+  }
+
+  // Fill tool - flood fill the area
+  if (currentTool === "fill") {
+    floodFill(Math.floor(coords.x), Math.floor(coords.y), brushColor);
+    saveState();
+    return;
+  }
+
+  // Brush / Eraser start drawing
+  if (currentTool === "brush" || currentTool === "eraser") {
+    drawing = true;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    return;
+  }
+
+  // For shapes: start drawing/preview on temp canvas
+  drawing = true;
+});
+
+// mousemove
+tempCanvas.addEventListener("mousemove", (e) => {
+  // panning takes priority
+  if (isPanning && currentTool === "hand") {
+    panX = e.clientX - startPanX;
+    panY = e.clientY - startPanY;
+    updateTransform();
+    return;
+  }
+
+  if (!drawing) return;
+
+  const coords = getCanvasCoordinates(e);
+
+  // Brush / Eraser draw directly on main canvas
+  if (currentTool === "brush" || currentTool === "eraser") {
+    ctx.strokeStyle = currentTool === "eraser" ? "#ffffff" : brushColor;
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = "round";
+    ctx.lineTo(coords.x, coords.y);
+    ctx.stroke();
+    return;
+  }
+
+  // Shape preview on temp canvas
+  tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+  const x2 = coords.x;
+  const y2 = coords.y;
+
+  tempCtx.strokeStyle = brushColor;
+  tempCtx.lineWidth = brushSize;
+
+  if (currentTool === "line") {
+    drawLine(tempCtx, startX, startY, x2, y2);
+  } else if (currentTool === "rect") {
+    tempCtx.strokeRect(startX, startY, x2 - startX, y2 - startY);
+  } else if (currentTool === "circle") {
+    const radius = Math.sqrt((x2 - startX) ** 2 + (y2 - startY) ** 2);
+    tempCtx.beginPath();
+    tempCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+    tempCtx.stroke();
+  } else if (currentTool === "triangle") {
+    tempCtx.beginPath();
+    tempCtx.moveTo(startX, y2);
+    tempCtx.lineTo((startX + x2) / 2, startY);
+    tempCtx.lineTo(x2, y2);
+    tempCtx.closePath();
+    tempCtx.stroke();
+  } else if (currentTool === "star") {
+    drawStar(tempCtx, startX, startY, 5, Math.abs(x2 - startX), Math.abs(x2 - startX) / 2);
+  } else if (currentTool === "arrow") {
+    drawArrow(tempCtx, startX, startY, x2, y2);
+  }
+});
+
+// mouseup
+tempCanvas.addEventListener("mouseup", (e) => {
+  // If we were panning, stop and return
+  if (isPanning && currentTool === "hand") {
+    isPanning = false;
+    tempCanvas.style.cursor = "grab";
+    return;
+  }
+
+  if (!drawing) return;
+  drawing = false;
+
+  if (currentTool === "brush" || currentTool === "eraser") {
+    ctx.closePath();
+    saveState();
+    return;
+  }
+
+  // For shapes: draw directly on main canvas
+  const coords = getCanvasCoordinates(e);
+  const x2 = coords.x;
+  const y2 = coords.y;
+
+  ctx.strokeStyle = brushColor;
+  ctx.lineWidth = brushSize;
+
+  if (currentTool === "line") {
+    drawLine(ctx, startX, startY, x2, y2);
+  } else if (currentTool === "rect") {
+    ctx.strokeRect(startX, startY, x2 - startX, y2 - startY);
+  } else if (currentTool === "circle") {
+    const radius = Math.sqrt((x2 - startX) ** 2 + (y2 - startY) ** 2);
+    ctx.beginPath();
+    ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (currentTool === "triangle") {
+    ctx.beginPath();
+    ctx.moveTo(startX, y2);
+    ctx.lineTo((startX + x2) / 2, startY);
+    ctx.lineTo(x2, y2);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (currentTool === "star") {
+    drawStar(ctx, startX, startY, 5, Math.abs(x2 - startX), Math.abs(x2 - startX) / 2);
+  } else if (currentTool === "arrow") {
+    drawArrow(ctx, startX, startY, x2, y2);
+  }
+
+  // Clear temp canvas
+  tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+  saveState();
+});
+
+// mouseleave - ensure panning/drawing stop if cursor leaves
+tempCanvas.addEventListener("mouseleave", () => {
+  if (isPanning && currentTool === "hand") {
+    isPanning = false;
+    tempCanvas.style.cursor = "grab";
+  }
+  if (drawing) {
+    drawing = false;
+    try { ctx.closePath(); } catch (e) {}
+    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+  }
+});
+
+// ---------- Shape Helpers ----------
+function drawStar(ctx, x, y, points, outerRadius, innerRadius) {
+  let step = Math.PI / points;
+  ctx.beginPath();
+  for (let i = 0; i < 2 * points; i++) {
+    let r = (i % 2 === 0) ? outerRadius : innerRadius;
+    let angle = i * step;
+    ctx.lineTo(x + r * Math.cos(angle), y + r * Math.sin(angle));
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawLine(ctx, fromX, fromY, toX, toY) {
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+}
+
+function drawArrow(ctx, fromX, fromY, toX, toY) {
+  const headlen = 10;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const angle = Math.atan2(dy, dx);
+
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6),
+             toY - headlen * Math.sin(angle - Math.PI / 6));
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6),
+             toY - headlen * Math.sin(angle + Math.PI / 6));
+  ctx.stroke();
+}
+
+// ---------- Text Tool ----------
+function createTextInput(screenX, screenY, canvasX, canvasY) {
+  // Remove any existing text input
+  if (textInput) {
+    finalizeText();
+  }
+
+  isTyping = true;
+  textX = canvasX;
+  textY = canvasY;
+
+  // Create input element
+  textInput = document.createElement('input');
+  textInput.type = 'text';
+  textInput.style.position = 'fixed';
+  textInput.style.left = screenX + 'px';
+  textInput.style.top = screenY + 'px';
+  textInput.style.font = `${brushSize * 3}px sans-serif`;
+  textInput.style.color = brushColor;
+  textInput.style.border = '2px solid #0d6efd';
+  textInput.style.background = 'white';
+  textInput.style.outline = 'none';
+  textInput.style.padding = '4px 8px';
+  textInput.style.zIndex = '3000';
+  textInput.style.minWidth = '150px';
+  textInput.style.pointerEvents = 'auto';
+
+  document.body.appendChild(textInput);
+  
+  // Use setTimeout to ensure the input is focused after it's added to DOM
+  setTimeout(() => {
+    textInput.focus();
+  }, 10);
+
+  // Handle Enter key to finalize text
+  const keydownHandler = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finalizeText();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelText();
+    }
+  };
+  textInput.addEventListener('keydown', keydownHandler);
+
+  // Handle clicking outside to finalize - but with a flag to prevent immediate blur
+  let canBlur = false;
+  setTimeout(() => {
+    canBlur = true;
+  }, 100);
+
+  textInput.addEventListener('blur', () => {
+    if (canBlur) {
+      setTimeout(() => finalizeText(), 50);
+    }
+  });
+}
+
+function finalizeText() {
+  if (!textInput || !isTyping) return;
+
+  const text = textInput.value;
+  if (text.trim()) {
+    // Draw text on canvas
+    ctx.font = `${brushSize * 3}px sans-serif`;
+    ctx.fillStyle = brushColor;
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, textX, textY);
+    saveState();
+  }
+
+  // Clean up
+  if (textInput && textInput.parentNode) {
+    textInput.parentNode.removeChild(textInput);
+  }
+  textInput = null;
+  isTyping = false;
+}
+
+function cancelText() {
+  if (textInput && textInput.parentNode) {
+    textInput.parentNode.removeChild(textInput);
+  }
+  textInput = null;
+  isTyping = false;
+}
+
+// ---------- UI Controls ----------
+const sizeInput = document.querySelector(".size-input");
+sizeInput.addEventListener("input", (e) => {
+  brushSize = parseInt(e.target.value, 10);
+});
+
+const decreaseBtn = document.querySelector(".btn-outline-secondary:nth-of-type(1)");
+const increaseBtn = document.querySelector(".btn-outline-secondary:nth-of-type(2)");
+
+decreaseBtn.addEventListener("click", () => {
+  brushSize = Math.max(1, brushSize - 1);
+  sizeInput.value = brushSize;
+});
+
+increaseBtn.addEventListener("click", () => {
+  brushSize++;
+  sizeInput.value = brushSize;
+});
+
+const colorPicker = document.querySelector(".color-picker");
+colorPicker.addEventListener("input", (e) => {
+  brushColor = e.target.value;
+});
+
+// ---------- Undo / Redo ----------
+document.getElementById("undoBtn").addEventListener("click", undo);
+document.getElementById("redoBtn").addEventListener("click", redo);
+
+function saveState() {
+  undoStack.push(canvas.toDataURL());
+  redoStack = [];
+}
+
+function undo() {
+  if (undoStack.length > 1) {
+    redoStack.push(undoStack.pop());
+    const imgData = undoStack[undoStack.length - 1];
+    restoreState(imgData);
+  }
+}
+
+function redo() {
+  if (redoStack.length > 0) {
+    const imgData = redoStack.pop();
+    undoStack.push(imgData);
+    restoreState(imgData);
+  }
+}
+
+function restoreState(imgData) {
+  const img = new Image();
+  img.src = imgData;
+  img.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+  };
+}
+
+window.addEventListener("load", () => {
+  saveState();
+});
+
+// Keyboard shortcuts for undo/redo
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    undo();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+    e.preventDefault();
+    redo();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    redo();
+  }
+});
+
+// ---------- Zoom Slider ----------
+const zoomSlider = document.getElementById("zoomRange");
+const zoomOutput = document.getElementById("output");
+
+// Start at 100% zoom
+zoomLevel = 1;
+zoomSlider.value = 100;
+zoomOutput.textContent = "100%";
+
+zoomSlider.addEventListener("input", (e) => {
+  const value = parseInt(e.target.value, 10);
+  zoomLevel = value / 100;
+  updateTransform();
+  zoomOutput.textContent = `${value}%`;
+});
+
+// ---------- Pan + Zoom Transform ----------
+function updateTransform() {
+  container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+}
+
+// set initial cursor
+tempCanvas.style.cursor = "crosshair";
+
+// Track save state
+let isSaved = true;  
+
+// Modify saveState() so every change = unsaved
+function saveState() {
+  undoStack.push(canvas.toDataURL());
+  redoStack = [];
+  isSaved = false;
+}
+
+// ---------- SAVE ----------
+function saveDrawing() {
+  const link = document.createElement("a");
+  link.download = "drawing.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+  isSaved = true;  // mark saved
+}
+
+// ---------- CLEAR CANVAS ----------
+function clearCanvas() {
+  // Refill with white background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  undoStack = [];
+  redoStack = [];
+  saveState();
+  isSaved = true;  // cleared fresh = saved state
+}
+
+// ---------- NEW BUTTON ----------
+document.getElementById("newBtn").addEventListener("click", () => {
+  const modalBody = document.getElementById("newModalBody");
+  const modalFooter = document.getElementById("newModalFooter");
+  modalBody.innerHTML = "";
+  modalFooter.innerHTML = "";
+
+  if (!isSaved) {
+    // Unsaved changes → offer Save or Start New
+    modalBody.textContent = "This action will clear your drawing history, do you want to save your current artwork?";
+    modalFooter.innerHTML = `
+      <button class="btn btn-altdark" id="modalSaveBtn">Save</button>
+      <button class="btn btn-altlight" id="modalNewBtn">Start New</button>
+      <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+    `;
+  } else {
+    // Already saved → just confirm
+    modalBody.textContent = "This action will clear your drawing history, do you want to continue?";
+    modalFooter.innerHTML = `
+      <button class="btn btn-altdark" id="modalYesBtn">Yes</button>
+      <button class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+    `;
+  }
+
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById("newDrawingModal"));
+  modal.show();
+
+  // Add event handlers dynamically
+  document.getElementById("modalSaveBtn")?.addEventListener("click", () => {
+    saveDrawing();
+    clearCanvas();
+    modal.hide();
+  });
+  document.getElementById("modalNewBtn")?.addEventListener("click", () => {
+    clearCanvas();
+    modal.hide();
+  });
+  document.getElementById("modalYesBtn")?.addEventListener("click", () => {
+    clearCanvas();
+    modal.hide();
+  });
+});
+
+// ---------- SAVE BUTTON ----------
+document.getElementById("saveBtn").addEventListener("click", saveDrawing);
+
+// ---------- OPEN BUTTON ----------
+const openBtn = document.getElementById("openBtn");
+const openFileInput = document.getElementById("openFileInput");
+
+openBtn.addEventListener("click", () => {
+  openFileInput.click(); // trigger hidden file input
+});
+
+openFileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const img = new Image();
+    img.onload = function() {
+      // Clear and reset white background
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Scale image to fit canvas while maintaining aspect ratio
+      const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+      const x = (canvas.width - img.width * scale) / 2;
+      const y = (canvas.height - img.height * scale) / 2;
+      ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+      saveState(); // push new state into undo history
+    };
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  // Reset file input so user can pick the same file again if needed
+  e.target.value = "";
+});
+
+</script>
+</body>
+</html>
